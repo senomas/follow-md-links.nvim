@@ -7,7 +7,7 @@ local cmd = vim.cmd
 local loop = vim.loop
 local ts_utils = require('nvim-treesitter.ts_utils')
 local query = require('vim.treesitter.query')
-local api = vim.api
+-- local api = vim.api
 
 local M = {}
 
@@ -39,7 +39,9 @@ local function get_link_destination()
     return vim.split(query.get_node_text(node_at_cursor, 0), '\n')[1]
   elseif node_at_cursor:type() == 'link_text' then
     local next_node = ts_utils.get_next_node(node_at_cursor)
-    if next_node:type() == 'link_destination' then
+    if not next_node then
+      return query.get_node_text(node_at_cursor, 0)
+    elseif next_node:type() == 'link_destination' then
       return vim.split(query.get_node_text(next_node, 0), '\n')[1]
     elseif next_node:type() == 'link_label' then
       local link_label = vim.split(query.get_node_text(next_node, 0), '\n')[1]
@@ -48,14 +50,14 @@ local function get_link_destination()
   elseif node_at_cursor:type() == 'link_reference_definition' or node_at_cursor:type() == 'inline_link' then
     local child_nodes = ts_utils.get_named_children(node_at_cursor)
     for _, node in pairs(child_nodes) do
-	    if node:type() == 'link_destination' then
+      if node:type() == 'link_destination' then
         return vim.split(query.get_node_text(node, 0), '\n')[1]
       end
     end
   elseif node_at_cursor:type() == 'full_reference_link' then
     local child_nodes = ts_utils.get_named_children(node_at_cursor)
     for _, node in pairs(child_nodes) do
-	    if node:type() == 'link_label' then
+      if node:type() == 'link_label' then
         local link_label = vim.split(query.get_node_text(node, 0), '\n')[1]
         return get_reference_link_destination(link_label)
       end
@@ -70,13 +72,13 @@ end
 
 local function resolve_link(link)
   local link_type
-  if link:sub(1,1) == [[/]] then
+  if link:sub(1, 1) == [[/]] then
     link_type = 'local'
-    return link, link_type
-  elseif link:sub(1,1) == [[~]] then
+    return os.getenv("JOURNAL_HOME") .. link, link_type
+  elseif link:sub(1, 1) == [[~]] then
     link_type = 'local'
     return os.getenv("HOME") .. [[/]] .. link:sub(2), link_type
-  elseif link:sub(1,8) == [[https://]] or link:sub(1,7) == [[http://]] then
+  elseif link:sub(1, 8) == [[https://]] or link:sub(1, 7) == [[http://]] then
     link_type = 'web'
     return link, link_type
   else
@@ -86,14 +88,24 @@ local function resolve_link(link)
 end
 
 local function follow_local_link(link)
+  local links = vim.split(link, "#")
+  link = links[1]
   local fd = loop.fs_open(link, "r", 438)
+  if not fd then
+    link = link .. ".md"
+    fd = loop.fs_open(link, "r", 438)
+  end
   if fd then
     local stat = loop.fs_fstat(fd)
     if not stat or not stat.type == 'file' or not loop.fs_access(link, 'R') then
       loop.fs_close(fd)
     else
       loop.fs_close(fd)
-      cmd(string.format('%s %s', 'e', fn.fnameescape(link)))
+      if links[2] then
+        cmd(string.format('e +/%s %s', links[2], fn.fnameescape(link)))
+      else
+        cmd(string.format('e %s', fn.fnameescape(link)))
+      end
     end
   end
 end
