@@ -87,26 +87,20 @@ local function resolve_link(link)
   end
 end
 
+local function ends_with(str, ending)
+  return ending == "" or str:sub(- #ending) == ending
+end
+
 local function follow_local_link(link)
   local links = vim.split(link, "#")
   link = links[1]
-  local fd = loop.fs_open(link, "r", 438)
-  if not fd then
+  if not ends_with(link, ".md") then
     link = link .. ".md"
-    fd = loop.fs_open(link, "r", 438)
   end
-  if fd then
-    local stat = loop.fs_fstat(fd)
-    if not stat or not stat.type == 'file' or not loop.fs_access(link, 'R') then
-      loop.fs_close(fd)
-    else
-      loop.fs_close(fd)
-      if links[2] then
-        cmd(string.format('e +/%s %s', links[2], fn.fnameescape(link)))
-      else
-        cmd(string.format('e %s', fn.fnameescape(link)))
-      end
-    end
+  if links[2] then
+    cmd(string.format('e +/%s %s', links[2], fn.fnameescape(link)))
+  else
+    cmd(string.format('e %s', fn.fnameescape(link)))
   end
 end
 
